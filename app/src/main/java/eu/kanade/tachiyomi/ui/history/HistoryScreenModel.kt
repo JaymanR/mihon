@@ -109,9 +109,67 @@ class HistoryScreenModel(
         _events.send(Event.OpenChapter(chapter))
     }
 
+    fun toggleSelection(history: HistoryWithRelations) {
+        mutableState.update { state ->
+            val newSelection = state.selectedItems.toMutableSet()
+            if (newSelection.contains(history.id)) {
+                newSelection.remove(history.id)
+            } else {
+                newSelection.add(history.id)
+            }
+            state.copy(
+                selectedItems = newSelection,
+                isSelectionMode = newSelection.isNotEmpty(),
+            )
+        }
+    }
+
+    fun toggleRangeSelection(history: HistoryWithRelations) {
+        mutableState.update { state ->
+            val list = state.list?.filterIsInstance<HistoryUiModel.Item>()?.map { it.item } ?: return@update state
+            val selected = state.selectedItems
+            val lastSelectedId = selected.lastOrNull() ?: return@update state
+            val lastIndex = list.indexOfFirst { it.id == lastSelectedId }
+            val currentIndex = list.indexOfFirst { it.id == history.id }
+            if (lastIndex == -1 || currentIndex == -1) return@update state
+
+            val range = if (lastIndex < currentIndex) lastIndex..currentIndex else currentIndex..lastIndex
+            val rangeIds = range.map { list[it].id }
+
+            val newSelection = selected + rangeIds
+            state.copy(
+                selectedItems = newSelection.toSet(),
+                isSelectionMode = newSelection.isNotEmpty(),
+            )
+        }
+    }
+
+    fun clearSelection() {
+        mutableState.update {
+            it.copy(
+                selectedItems = emptySet(),
+                isSelectionMode = false,
+            )
+        }
+    }
+
     fun removeFromHistory(history: HistoryWithRelations) {
         screenModelScope.launchIO {
             removeHistory.await(history)
+        }
+    }
+
+    fun removeSelectedHistory() {
+        screenModelScope.launchIO {
+            val current = mutableState.value
+            val itemsToDelete = current.list
+                ?.filterIsInstance<HistoryUiModel.Item>()
+                ?.map { it.item }
+                ?.filter { it.id in current.selectedItems }
+                ?: return@launchIO
+
+            itemsToDelete.forEach { removeHistory.await(it) }
+            clearSelection()
         }
     }
 
@@ -242,6 +300,8 @@ class HistoryScreenModel(
         val searchQuery: String? = null,
         val list: List<HistoryUiModel>? = null,
         val dialog: Dialog? = null,
+        val selectedItems: Set<Long> = emptySet(),
+        val isSelectionMode: Boolean = false,
     )
 
     sealed interface Dialog {

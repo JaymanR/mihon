@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -40,6 +42,10 @@ fun HistoryScreen(
     onClickResume: (mangaId: Long, chapterId: Long) -> Unit,
     onClickFavorite: (mangaId: Long) -> Unit,
     onDialogChange: (HistoryScreenModel.Dialog?) -> Unit,
+    onClickSelect: (HistoryWithRelations) -> Unit,
+    onClickRangeSelect: (HistoryWithRelations) -> Unit,
+    onClickCancelSelection: () -> Unit,
+    onClickDeleteSelected: () -> Unit,
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -48,17 +54,34 @@ fun HistoryScreen(
                 searchQuery = state.searchQuery,
                 onChangeSearchQuery = onSearchQueryChange,
                 actions = {
-                    AppBarActions(
-                        persistentListOf(
-                            AppBar.Action(
-                                title = stringResource(MR.strings.pref_clear_history),
-                                icon = Icons.Outlined.DeleteSweep,
-                                onClick = {
-                                    onDialogChange(HistoryScreenModel.Dialog.DeleteAll)
-                                },
+                    if (state.isSelectionMode) {
+                        AppBarActions(
+                            persistentListOf(
+                                AppBar.Action(
+                                    title = stringResource(MR.strings.action_delete),
+                                    icon = Icons.Default.Delete,
+                                    onClick = onClickDeleteSelected,
+                                ),
+                                AppBar.Action(
+                                    title = stringResource(MR.strings.action_cancel),
+                                    icon = Icons.Default.Close,
+                                    onClick = onClickCancelSelection,
+                                )
+                            )
+                        )
+                    } else {
+                        AppBarActions(
+                            persistentListOf(
+                                AppBar.Action(
+                                    title = stringResource(MR.strings.pref_clear_history),
+                                    icon = Icons.Outlined.DeleteSweep,
+                                    onClick = {
+                                        onDialogChange(HistoryScreenModel.Dialog.DeleteAll)
+                                    },
+                                ),
                             ),
-                        ),
-                    )
+                        )
+                    }
                 },
                 scrollBehavior = scrollBehavior,
             )
@@ -80,12 +103,15 @@ fun HistoryScreen(
                 )
             } else {
                 HistoryScreenContent(
+                    state = state,
                     history = it,
                     contentPadding = contentPadding,
                     onClickCover = { history -> onClickCover(history.mangaId) },
                     onClickResume = { history -> onClickResume(history.mangaId, history.chapterId) },
                     onClickDelete = { item -> onDialogChange(HistoryScreenModel.Dialog.Delete(item)) },
                     onClickFavorite = { history -> onClickFavorite(history.mangaId) },
+                    onClickSelect = onClickSelect,
+                    onClickRangeSelect = onClickRangeSelect,
                 )
             }
         }
@@ -94,13 +120,16 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryScreenContent(
+    state: HistoryScreenModel.State,
     history: List<HistoryUiModel>,
     contentPadding: PaddingValues,
     onClickCover: (HistoryWithRelations) -> Unit,
     onClickResume: (HistoryWithRelations) -> Unit,
     onClickDelete: (HistoryWithRelations) -> Unit,
     onClickFavorite: (HistoryWithRelations) -> Unit,
-) {
+    onClickSelect: (HistoryWithRelations) -> Unit,
+    onClickRangeSelect: (HistoryWithRelations) -> Unit,
+    ) {
     FastScrollLazyColumn(
         contentPadding = contentPadding,
     ) {
@@ -125,11 +154,25 @@ private fun HistoryScreenContent(
                     val value = item.item
                     HistoryItem(
                         modifier = Modifier.animateItemFastScroll(),
+                        isSelected = state.selectedItems.contains(value.id),
                         history = value,
                         onClickCover = { onClickCover(value) },
-                        onClickResume = { onClickResume(value) },
+                        onClickResume = {
+                            if (state.isSelectionMode) {
+                                onClickSelect(value)
+                            } else {
+                                onClickResume(value)
+                            }
+                        },
                         onClickDelete = { onClickDelete(value) },
                         onClickFavorite = { onClickFavorite(value) },
+                        onLongClick = {
+                            if (state.isSelectionMode) {
+                                onClickRangeSelect(value)
+                            } else {
+                                onClickSelect(value)
+                            }
+                        }
                     )
                 }
             }
@@ -155,8 +198,12 @@ internal fun HistoryScreenPreviews(
             onSearchQueryChange = {},
             onClickCover = {},
             onClickResume = { _, _ -> run {} },
-            onDialogChange = {},
             onClickFavorite = {},
+            onDialogChange = {},
+            onClickCancelSelection = {},
+            onClickDeleteSelected = {},
+            onClickSelect = {},
+            onClickRangeSelect = {},
         )
     }
 }
